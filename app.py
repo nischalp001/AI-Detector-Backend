@@ -209,3 +209,41 @@ async def predict(payload: TextPayload):
         "heuristics": heuristics,
         "line_level_analysis": detailed_lines["line_level_analysis"]
     }
+
+# Add this after the app definition
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "service": "AI Detector"}
+
+@app.get("/")
+async def root():
+    return {"message": "AI Detector API", "version": "1.0"}
+
+@app.post("/predict")
+async def predict(payload: TextPayload):
+    try:
+        text = payload.text
+        
+        if not text or len(text.strip()) == 0:
+            return {
+                "error": "Empty text provided",
+                "label": None,
+                "final_confidence": None
+            }
+        
+        final_score, onnx_prob, heuristics, detailed_lines = combined_ai_score_with_line_analysis(text)
+        
+        return {
+            "label": "AI" if final_score >= 0.5 else "Human",
+            "final_confidence": final_score,
+            "onnx_model_confidence": onnx_prob,
+            "heuristics": heuristics,
+            "line_level_analysis": detailed_lines["line_level_analysis"]
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "label": None,
+            "final_confidence": None
+        }
