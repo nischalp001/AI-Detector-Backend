@@ -11,12 +11,7 @@ ENV/
 **/.env*/
 **/ENV*/
 
-# Specific folder
-onnx-ai-detector/
-
 # Specific ONNX model file
-model.onnx
-*.onnx  # Optional: to ignore all .onnx files
 
 # Python cache and build artifacts
 __pycache__/
