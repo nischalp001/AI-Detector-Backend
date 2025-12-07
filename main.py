@@ -12,9 +12,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 nltk.download("punkt")
 
-# -----------------------------
-# ORIGINAL CODE (UNCHANGED)
-# -----------------------------
 MODEL_DIR = "onnx-ai-detector"
 ONNX_PATH = os.path.join(MODEL_DIR, "model.onnx")
 
@@ -40,7 +37,10 @@ class TextPayload(BaseModel):
 
 def onnx_predict(text: str) -> float:
     inputs = tokenizer(text, return_tensors="np", truncation=True, padding=True)
-    ort_inputs = {"input_ids": inputs["input_ids"], "attention_mask": inputs["attention_mask"]}
+    ort_inputs = {
+        "input_ids": inputs["input_ids"],
+        "attention_mask": inputs["attention_mask"]
+    }
     outputs = session.run(None, ort_inputs)
     logits = outputs[0]
     probs = softmax(logits)[0][1]
@@ -52,11 +52,7 @@ def softmax(x):
     return e / e.sum(axis=-1, keepdims=True)
 
 
-# -----------------------------
-# NEW ADVANCED AI DETECTOR ADD-ONS
-# -----------------------------
-tool = language_tool_python.LanguageTool('en-US')
-
+tool = language_tool_python.LanguageTool("en-US")
 
 def detect_structure(text):
     score = 0
@@ -72,7 +68,8 @@ def detect_structure(text):
 
 
 def detect_tone(text):
-    ai_phrases = ["in conclusion", "overall", "furthermore", "moreover", "additionally", "here are some", "importantly"]
+    ai_phrases = ["in conclusion", "overall", "furthermore",
+                  "moreover", "additionally", "here are some", "importantly"]
     count = sum(text.lower().count(p) for p in ai_phrases)
     return min(count * 0.1, 1.0)
 
@@ -92,7 +89,7 @@ def detect_emoji_pattern(text):
     count = len(ems)
     if count == 0:
         return 0.3
-    if all(e['emoji'] in "🎯🚀🔍🔥✨" for e in ems):
+    if all(e["emoji"] in "🎯🚀🔍🔥✨" for e in ems):
         return 0.7
     return 0.2
 
@@ -149,23 +146,19 @@ def combined_ai_score(text):
     }
 
 
-# -----------------------------
-# NEW HELPER: Sentence-level highlighting (with markup/code detection)
-# -----------------------------
 def combined_ai_score_with_line_analysis(text):
     final, onnx_prob, heuristics = combined_ai_score(text)
 
-    # Split into sentences/lines
-    potential_lines = re.split(r'(?<=[.!?])\s+|\n', text)
-    lines = [line.strip() for line in potential_lines if line.strip()]
+    lines = [line.strip() for line in re.split(
+        r'(?<=[.!?])\s+|\n', text) if line.strip()]
 
     line_level_analysis = []
 
-    # Only analyze lines if more than one line
     if len(lines) > 1:
         for line in lines:
-            # Markup/code detection
-            code_or_markup_pattern = r'^\s*(```|<[^>]+>|#include|def |class |for |while |if |else |return )'
+            code_or_markup_pattern = (
+                r'^\s*(```|<[^>]+>|#include|def |class |for |while |if |else |return )'
+            )
             if re.search(code_or_markup_pattern, line):
                 line_score = 1.0
                 label = "highly AI"
@@ -183,67 +176,41 @@ def combined_ai_score_with_line_analysis(text):
             line_level_analysis.append({
                 "line": line,
                 "ai_score": line_score,
-                "ai_label": label
+                "ai_label": label,
             })
 
     return final, onnx_prob, heuristics, {
         "overall_ai_score": final,
         "overall_ai_label": "AI" if final >= 0.5 else "Human",
-        "line_level_analysis": line_level_analysis
+        "line_level_analysis": line_level_analysis,
     }
 
-
-# -----------------------------
-# API Endpoint
-# -----------------------------
-@app.post("/predict")
-async def predict(payload: TextPayload):
-    text = payload.text
-
-    final_score, onnx_prob, heuristics, detailed_lines = combined_ai_score_with_line_analysis(text)
-    
-    return {
-        "label": "AI" if final_score >= 0.5 else "Human",
-        "final_confidence": final_score,
-        "onnx_model_confidence": onnx_prob,
-        "heuristics": heuristics,
-        "line_level_analysis": detailed_lines["line_level_analysis"]
-    }
-
-# Add this after the app definition
-
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy", "service": "AI Detector"}
 
 @app.get("/")
 async def root():
     return {"message": "AI Detector API", "version": "1.0"}
 
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
+
+
 @app.post("/predict")
 async def predict(payload: TextPayload):
-    try:
-        text = payload.text
-        
-        if not text or len(text.strip()) == 0:
-            return {
-                "error": "Empty text provided",
-                "label": None,
-                "final_confidence": None
-            }
-        
-        final_score, onnx_prob, heuristics, detailed_lines = combined_ai_score_with_line_analysis(text)
-        
-        return {
-            "label": "AI" if final_score >= 0.5 else "Human",
-            "final_confidence": final_score,
-            "onnx_model_confidence": onnx_prob,
-            "heuristics": heuristics,
-            "line_level_analysis": detailed_lines["line_level_analysis"]
-        }
-    except Exception as e:
-        return {
-            "error": str(e),
-            "label": None,
-            "final_confidence": None
-        }
+    text = payload.text
+    final_score, onnx_prob, heuristics, detailed_lines = combined_ai_score_with_line_analysis(text)
+
+    return {
+        "label": "AI" if final_score >= 0.5 else "Human",
+        "final_confidence": final_score,
+        "onnx_model_confidence": onnx_prob,
+        "heuristics": heuristics,
+        "line_level_analysis": detailed_lines["line_level_analysis"],
+    }
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8080))
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=port)
